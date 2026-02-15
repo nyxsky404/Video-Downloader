@@ -20,6 +20,15 @@ curl -X POST http://localhost:8000/download \
   -d '{"url": "VIDEO_URL", "custom_filename": "my_video"}'
 ```
 
+### 3. Download Specific Video
+```bash
+# Browser-friendly download URL
+curl -O http://localhost:8000/video/my_video.mp4
+
+# Or access static files directly
+curl -O http://localhost:8000/downloads/my_video.mp4
+```
+
 ### Health Check
 ```bash
 curl http://localhost:8000/health
