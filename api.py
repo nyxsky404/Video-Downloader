@@ -13,9 +13,7 @@ app = FastAPI()
 downloader = VideoDownloader()
 logger = logging.getLogger(__name__)
 
-# Mount static files directory for video downloads
 app.mount("/downloads", StaticFiles(directory=str(settings.LOCAL_DOWNLOAD_DIR)), name="downloads")
-
 
 @app.get("/")
 async def home():
@@ -32,9 +30,6 @@ async def download_video(request: DownloadRequest):
     try:
         logger.info(f"Starting download: {request.url}")
         result = downloader.download(str(request.url), request.custom_filename)
-        
-        if "filename" in result:
-            result["download_url"] = f"/downloads/{result['filename']}"
         
         return {
             "status": "success",

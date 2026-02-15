@@ -77,8 +77,8 @@ class VideoDownloader:
                     'status': 'success',
                     'platform': info.get('extractor', ''),
                     'video_title': info.get('title', ''),
-                    'filepath': str(filepath.absolute()),
                     'filename': filepath.name,
+                    'download_url' : f"/downloads/{filepath.name}"
                 }
                 
         except yt_dlp.utils.DownloadError as e:
