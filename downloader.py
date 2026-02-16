@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict
 import yt_dlp
 
 from config import settings
@@ -22,16 +22,12 @@ class VideoDownloader:
         self.download_dir = settings.LOCAL_DOWNLOAD_DIR
         logger.info(f"VideoDownloader initialized with local storage: {self.download_dir}")
     
-    def download(self, url: str, custom_filename: Optional[str] = None) -> Dict:
+    def download(self, url: str) -> Dict:
 
         logger.info(f"Starting download for URL: {url}")
         
         try:
-            if custom_filename:
-                output_template = f"{custom_filename}_%(playlist_index|)s%(title).50s_%(id)s.%(ext)s"
-            else:
-                output_template = "%(playlist_index|)svideo_%(id)s.%(ext)s"
-            
+            output_template = "%(playlist_index|)svideo_%(id)s.%(ext)s"
             output_path = self.download_dir / output_template
             
             ydl_opts = {
