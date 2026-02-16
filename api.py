@@ -31,9 +31,14 @@ async def download_video(request: DownloadRequest):
         logger.info(f"Starting download: {request.url}")
         result = downloader.download(str(request.url), request.custom_filename)
         
+        if result.get('type') == 'playlist':
+            message = f"Playlist downloaded successfully ({result.get('video_count', 0)} videos)"
+        else:
+            message = "Video downloaded successfully"
+        
         return {
             "status": "success",
-            "message": "Video downloaded successfully",
+            "message": message,
             "data": result
         }
     
