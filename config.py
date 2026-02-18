@@ -1,6 +1,9 @@
 import os
+import logging
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     LOCAL_DOWNLOAD_DIR: Path = Path("./downloads")
@@ -34,12 +37,17 @@ class Settings(BaseSettings):
         if self.YT_DLP_COOKIES_CONTENT and self.YT_DLP_COOKIES_FILE:
             cookies_path = Path(self.YT_DLP_COOKIES_FILE)
             if not cookies_path.exists() or os.environ.get("RENDER"):
-                cookies_path.parent.mkdir(parents=True, exist_ok=True)
-                cookies_path.write_text(self.YT_DLP_COOKIES_CONTENT)
+                try:
+                    cookies_path.parent.mkdir(parents=True, exist_ok=True)
+                    cookies_path.write_text(self.YT_DLP_COOKIES_CONTENT)
+                    logger.info(f"Created cookies file from YT_DLP_COOKIES_CONTENT: {cookies_path}")
+                except Exception as e:
+                    logger.error(f"Failed to create cookies file: {e}")
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.LOCAL_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        self._ensure_cookies_file()
 
 
 settings = Settings()
