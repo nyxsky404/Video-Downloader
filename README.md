@@ -81,6 +81,35 @@ docker-compose down
 
 API will be available at: **http://localhost:8000**
 
+### Option 3: Render Deployment
+
+1. **Push code to GitHub**
+
+2. **Create new Web Service on Render**
+   - Connect your GitHub repo
+   - Select "Docker" as environment
+   - Set region and instance type
+
+3. **Set Environment Variables in Render Dashboard:**
+   ```
+   YT_DLP_COOKIES_FILE=/app/downloads/cookies.txt
+   YT_DLP_COOKIES_CONTENT=<paste your cookies.txt content here>
+   LOCAL_DOWNLOAD_DIR=/app/downloads
+   ```
+   
+4. **Generate cookies content for env var:**
+   ```bash
+   # After exporting cookies.txt locally, copy its content:
+   cat cookies.txt | pbcopy  # macOS
+   cat cookies.txt | xclip -selection clipboard  # Linux
+   ```
+   
+   Then paste into `YT_DLP_COOKIES_CONTENT` environment variable in Render.
+
+5. **Deploy**
+
+**Note:** Render's filesystem is ephemeral. Downloads are lost on redeploy. For persistent storage, use Render Disks (paid feature) or external storage (S3, etc.).
+
 ## 🍪 YouTube Cookies
 
 YouTube requires authentication to avoid bot detection. You need to provide cookies from a browser logged into YouTube.
@@ -170,6 +199,7 @@ DOWNLOAD_TIMEOUT=300
 YT_DLP_MAX_RETRIES=3
 YT_DLP_MAX_FILESIZE=500
 YT_DLP_COOKIES_FILE=./cookies.txt
+YT_DLP_COOKIES_CONTENT=   # Optional: cookies content as string (for cloud deployment)
 API_HOST=0.0.0.0
 API_PORT=8000
 LOG_LEVEL=INFO
