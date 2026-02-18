@@ -4,6 +4,7 @@ from typing import Dict
 import yt_dlp
 
 from config import settings
+from cookies_checker import check_cookies
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -20,7 +21,20 @@ class VideoDownloader:
     
     def __init__(self):
         self.download_dir = settings.LOCAL_DOWNLOAD_DIR
-        logger.info(f"VideoDownloader initialized with local storage: {self.download_dir}")
+        
+        cookies_status = check_cookies(settings.YT_DLP_COOKIES_FILE)
+        if cookies_status.status == "valid":
+            logger.info(f"Cookies valid: {cookies_status.message}")
+        elif cookies_status.status == "expiring_soon":
+            logger.warning(f"Cookies expiring soon: {cookies_status.message}")
+        elif cookies_status.status == "expired":
+            logger.error(f"Cookies EXPIRED: {cookies_status.message} - Refresh immediately!")
+        elif cookies_status.status == "missing":
+            logger.warning("No cookies file - YouTube may block downloads")
+        else:
+            logger.warning(f"Cookies status: {cookies_status.message}")
+        
+        logger.info(f"Local storage: {self.download_dir}")
     
     def download(self, url: str) -> Dict:
 
@@ -54,6 +68,9 @@ class VideoDownloader:
                 'logger': logger,
                 'js_runtimes': {'node': {}},
             }
+            
+            if settings.cookies_file_exists:
+                ydl_opts['cookiefile'] = str(settings.YT_DLP_COOKIES_FILE)
             
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -111,9 +128,9 @@ class VideoDownloader:
                         'download_url': f"/downloads/{filepath.name}"
                     }
                 
-        except yt_dlp.utils.DownloadError as e:
-            logger.error(f"Download error: {str(e)}")
-            raise Exception(f"Failed to download video: {str(e)}")
         except Exception as e:
+            if "DownloadError" in type(e).__name__:
+                logger.error(f"Download error: {str(e)}")
+                raise Exception(f"Failed to download video: {str(e)}")
             logger.error(f"Unexpected error: {str(e)}", exc_info=True)
             raise Exception(f"Error during download: {str(e)}")

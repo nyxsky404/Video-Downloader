@@ -32,7 +32,20 @@ API_HOST=0.0.0.0
 API_PORT=8000
 ```
 
-5. **Run the API**
+5. **Setup YouTube cookies** (required for YouTube downloads)
+   
+   See [YouTube Cookies](#-youtube-cookies) section for detailed instructions.
+   
+   Quick start:
+   ```bash
+   # Option A: Use browser extension (recommended)
+   # Install "Get cookies.txt LOCALLY" extension, export cookies to cookies.txt
+   
+   # Option B: Use yt-dlp
+   yt-dlp --cookies-from-browser chrome "https://youtube.com" --print-to-file "%(cookies)s" cookies.txt
+   ```
+
+6. **Run the API**
 ```bash
 python api.py
 ```
@@ -41,22 +54,83 @@ API will be available at: **http://localhost:8000**
 
 ### Option 2: Docker Setup
 
-1. **Start the service**
+1. **Setup YouTube cookies** (required for YouTube downloads)
+   
+   See [YouTube Cookies](#-youtube-cookies) section for detailed instructions.
+   
+   ```bash
+   # Make sure cookies.txt exists before starting Docker
+   touch cookies.txt  # Create empty file first
+   # Then export cookies using extension or yt-dlp
+   ```
+
+2. **Start the service**
 ```bash
 docker-compose up -d
 ```
 
-2. **Check logs**
+3. **Check logs**
 ```bash
 docker-compose logs -f
 ```
 
-3. **Stop the service**
+4. **Stop the service**
 ```bash
 docker-compose down
 ```
 
 API will be available at: **http://localhost:8000**
+
+## 🍪 YouTube Cookies
+
+YouTube requires authentication to avoid bot detection. You need to provide cookies from a browser logged into YouTube.
+
+### Method 1: Browser Extension (Recommended)
+
+The "Get cookies.txt LOCALLY" extension is more reliable than yt-dlp's built-in exporter.
+
+**Install the extension:**
+- [Chrome Web Store](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
+- [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)
+
+**Export cookies:**
+1. Open YouTube in your browser and make sure you're logged in
+2. Click the extension icon in your browser toolbar
+3. Click "Export" or "Get cookies.txt"
+4. Save the file as `cookies.txt` in your project root
+
+### Method 2: yt-dlp Built-in
+
+```bash
+# Using Chrome
+yt-dlp --cookies-from-browser chrome "https://youtube.com" --print-to-file "%(cookies)s" cookies.txt
+
+# Using Firefox
+yt-dlp --cookies-from-browser firefox "https://youtube.com" --print-to-file "%(cookies)s" cookies.txt
+```
+
+### ⚠️ Important Notes
+
+**Use a dedicated YouTube account:**
+- Create a separate Google account just for this service
+- Don't use your personal/main YouTube account
+- This prevents cookie conflicts and protects your main account
+
+**After exporting cookies:**
+- **Don't use that browser for YouTube** - logging in/out rotates cookies
+- **Don't use that Google account elsewhere** - activity can invalidate cookies
+- Consider using a separate browser profile for cookie exports
+
+**If cookies stop working:**
+- Cookies may be rotated by Google for security
+- Re-export cookies and replace `cookies.txt`
+- Check status: `curl http://localhost:8000/cookies/status`
+
+### Cookie lifecycle:
+- Valid for **3-6 months** typically
+- Monitor via `/health` or `/cookies/status` endpoints
+- Regenerate when downloads fail with auth errors
+- Set a calendar reminder to refresh every 2-3 months
 
 ## 📖 Usage
 
@@ -72,7 +146,17 @@ curl -X POST http://localhost:8000/download \
 curl -O http://localhost:8000/video/video_dQw4w9WgXcQ.mp4
 ```
 
-### 3. Access Interactive API Docs
+### 3. Check Service Health
+```bash
+curl http://localhost:8000/health
+```
+
+### 4. Check Cookie Status
+```bash
+curl http://localhost:8000/cookies/status
+```
+
+### 5. Access Interactive API Docs
 Open in browser: **http://localhost:8000/docs**
 
 **Note**: Downloaded videos are saved in `./downloads` folder
@@ -85,6 +169,7 @@ LOCAL_DOWNLOAD_DIR=./downloads
 DOWNLOAD_TIMEOUT=300
 YT_DLP_MAX_RETRIES=3
 YT_DLP_MAX_FILESIZE=500
+YT_DLP_COOKIES_FILE=./cookies.txt
 API_HOST=0.0.0.0
 API_PORT=8000
 LOG_LEVEL=INFO

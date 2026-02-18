@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from downloader import VideoDownloader
 from models import DownloadRequest, DownloadResponse, VideoFileInfo
 from config import settings
+from cookies_checker import check_cookies
 
 app = FastAPI()
 downloader = VideoDownloader()
@@ -22,7 +23,17 @@ async def home():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    cookies_status = check_cookies(settings.YT_DLP_COOKIES_FILE)
+    return {
+        "status": "healthy",
+        "cookies": cookies_status.to_dict()
+    }
+
+
+@app.get("/cookies/status")
+async def cookies_status():
+    status = check_cookies(settings.YT_DLP_COOKIES_FILE)
+    return status.to_dict()
 
 
 @app.post("/download", response_model=DownloadResponse)

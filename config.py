@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     DOWNLOAD_TIMEOUT: int = 300
     YT_DLP_MAX_RETRIES: int = 3
     YT_DLP_MAX_FILESIZE: int = 500
+    YT_DLP_COOKIES_FILE: Path = Path("")
     
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
@@ -21,7 +22,11 @@ class Settings(BaseSettings):
         case_sensitive=False
     )
     
-    # create download directory if not exists
+    @property
+    def cookies_file_exists(self) -> bool:
+        path_str = str(self.YT_DLP_COOKIES_FILE)
+        return bool(path_str) and path_str != "." and self.YT_DLP_COOKIES_FILE.exists()
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.LOCAL_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)

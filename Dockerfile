@@ -16,7 +16,7 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY config.py models.py downloader.py cookies_checker.py api.py ./
 
 RUN mkdir -p /app/downloads
 
@@ -24,6 +24,7 @@ EXPOSE 8000
 
 ENV PYTHONUNBUFFERED=1
 ENV LOCAL_DOWNLOAD_DIR=/app/downloads
+ENV YT_DLP_COOKIES_FILE=/app/cookies.txt
 ENV API_HOST=0.0.0.0
 ENV API_PORT=8000
 
