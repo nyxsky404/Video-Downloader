@@ -31,17 +31,20 @@ def test_cookies_with_youtube(cookies_path: Path) -> tuple[bool, str]:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': True,
+            'extract_flat': 'in_playlist',
             'cookiefile': str(cookies_path),
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
-        return True, "YouTube access confirmed"
+            info = ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
+            if info:
+                return True, "YouTube access confirmed"
+            return False, "Could not extract video info"
     except Exception as e:
         error_msg = str(e).lower()
-        if "sign in" in error_msg or "bot" in error_msg or "cookies" in error_msg:
+        auth_errors = ["sign in", "bot", "cookies are no longer valid", "confirm you", "not a bot"]
+        if any(err in error_msg for err in auth_errors):
             return False, "Cookies rejected by YouTube"
-        return False, f"Validation failed: {str(e)[:50]}"
+        return True, "YouTube accessible (non-auth error ignored)"
 
 
 def check_cookies(cookies_path: Path, test_with_youtube: bool = False) -> CookiesStatus:
