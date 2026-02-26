@@ -5,6 +5,7 @@ import yt_dlp
 
 from config import settings
 from cookies_checker import check_cookies
+from storage import get_storage_backend, StorageBackend
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 class VideoDownloader:
     
     def __init__(self):
-        self.download_dir = settings.LOCAL_DOWNLOAD_DIR
+        self.storage: StorageBackend = get_storage_backend()
+        self.download_dir = self.storage.get_download_dir()
         
         cookies_status = check_cookies(settings.YT_DLP_COOKIES_FILE)
         if cookies_status.status == "valid":
@@ -34,7 +36,8 @@ class VideoDownloader:
         else:
             logger.warning(f"Cookies status: {cookies_status.message}")
         
-        logger.info(f"Local storage: {self.download_dir}")
+        storage_type = "S3" if settings.USE_S3 else "local"
+        logger.info(f"Storage backend: {storage_type} ({self.download_dir})")
     
     def download(self, url: str) -> Dict:
         logger.info(f"Starting download for URL: {url}")
@@ -95,8 +98,9 @@ class VideoDownloader:
                             
                             filepath = Path(filename)
                             if filepath.exists():
+                                file_url = self.storage.save_file(filepath, filepath.name)
                                 filenames.append(filepath.name)
-                                download_urls.append(f"/downloads/{filepath.name}")
+                                download_urls.append(file_url)
                     
                     return {
                         'status': 'success',
@@ -120,13 +124,15 @@ class VideoDownloader:
                     
                     logger.info(f"Download successful: {filepath.name}")
                     
+                    file_url = self.storage.save_file(filepath, filepath.name)
+                    
                     return {
                         'status': 'success',
                         'type': 'video',
                         'platform': info.get('extractor', ''),
                         'video_title': info.get('title', ''),
                         'filename': filepath.name,
-                        'download_url': f"/downloads/{filepath.name}"
+                        'download_url': file_url
                     }
                 
         except Exception as e:

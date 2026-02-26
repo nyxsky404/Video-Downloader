@@ -7,6 +7,7 @@ services:
       - ./downloads:/app/downloads
       - ./cookies.txt:/app/cookies.txt
     environment:
+      - USE_S3=false
       - LOCAL_DOWNLOAD_DIR=/app/downloads
       - YT_DLP_COOKIES_FILE=/app/cookies.txt
     restart: unless-stopped

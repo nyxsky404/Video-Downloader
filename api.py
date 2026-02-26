@@ -2,18 +2,21 @@ import logging
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from downloader import VideoDownloader
 from models import DownloadRequest, DownloadResponse
 from config import settings
 from cookies_checker import check_cookies
+from storage import get_storage_backend
 
 app = FastAPI()
 downloader = VideoDownloader()
+storage = get_storage_backend()
 logger = logging.getLogger(__name__)
 
-app.mount("/downloads", StaticFiles(directory=str(settings.LOCAL_DOWNLOAD_DIR)), name="downloads")
+if not settings.USE_S3:
+    app.mount("/downloads", StaticFiles(directory=str(settings.LOCAL_DOWNLOAD_DIR)), name="downloads")
 
 @app.get("/")
 async def home():
@@ -67,10 +70,15 @@ async def download_video(request: DownloadRequest):
 @app.get("/video/{filename}")
 async def get_video(filename: str):
     try:
-
         if not Path(filename).suffix:
             filename = f"{filename}.mp4"
-
+        
+        if settings.USE_S3:
+            if not storage.file_exists(filename):
+                raise HTTPException(status_code=404, detail="Video file not found")
+            
+            return {"url": storage.get_file_url(filename)}
+        
         file_path = Path(settings.LOCAL_DOWNLOAD_DIR) / filename
         
         if not file_path.exists():

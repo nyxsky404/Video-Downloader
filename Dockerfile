@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --upgrade --pre "yt-dlp[default]"
 
-COPY config.py models.py downloader.py cookies_checker.py api.py ./
+COPY config.py models.py downloader.py cookies_checker.py storage.py api.py ./
 
 RUN mkdir -p /app/downloads
 

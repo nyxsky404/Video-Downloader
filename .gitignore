@@ -6,6 +6,8 @@
 .DS_Store
 Thumbs.db
 
+*.pem
+
 .env
 cookies.txt
 .venv

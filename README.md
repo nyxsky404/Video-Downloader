@@ -106,7 +106,7 @@ The "Get cookies.txt LOCALLY" extension with incognito mode prevents cookie rota
 **Export cookies (best practice to prevent rotation):**
 1. Open a **new private/incognito window**
 2. Log into YouTube in that window
-3. Navigate to `https://www.youtube.com/robots.txt` (keep this as the ONLY tab)
+3. Navigate to `https://www.youtube.com/` (keep this as the ONLY tab)
 4. Use the extension to export cookies
 5. Save as `cookies.txt` in your project root
 6. **Close the incognito window immediately** - never reopen it
@@ -165,8 +165,15 @@ curl -X POST http://localhost:8000/download \
 ```
 
 ### 2. Retrieve Downloaded Video
+
+**Option A: Via API endpoint (works with both S3 and local storage)**
 ```bash
 curl -O http://localhost:8000/video/video_dQw4w9WgXcQ.mp4
+```
+
+**Option B: Direct access (local storage only, when USE_S3=false)**
+```bash
+curl -O http://localhost:8000/downloads/video_dQw4w9WgXcQ.mp4
 ```
 
 ### 3. Check Service Health
@@ -198,4 +205,9 @@ API_HOST=0.0.0.0
 API_PORT=8000
 LOG_LEVEL=INFO
 LOG_FILE=video_downloader.log
+
+# Storage Configuration
+USE_S3=true               # true = S3 storage (production), false = Local storage (development)
+S3_BUCKET_NAME=video-downloader-bucket
+AWS_REGION=ap-south-1
 ```

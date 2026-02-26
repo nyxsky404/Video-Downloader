@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "video_downloader.log"
+    
+    # Storage: S3 is the primary storage backend for production
+    # Use S3 for scalable, persistent video storage
+    USE_S3: bool = True
+    S3_BUCKET_NAME: str = "video-downloader-bucket"
+    AWS_REGION: str = "ap-south-1"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -33,9 +39,10 @@ class Settings(BaseSettings):
         return bool(path_str) and path_str != "." and self.YT_DLP_COOKIES_FILE.exists()
     
     def _ensure_cookies_file(self) -> None:
+        """Create cookies file from environment variable if it doesn't exist"""
         if self.YT_DLP_COOKIES_CONTENT and self.YT_DLP_COOKIES_FILE:
             cookies_path = Path(self.YT_DLP_COOKIES_FILE)
-            if not cookies_path.exists() or os.environ.get("RENDER"):
+            if not cookies_path.exists():
                 try:
                     cookies_path.parent.mkdir(parents=True, exist_ok=True)
                     cookies_path.write_text(self.YT_DLP_COOKIES_CONTENT)
