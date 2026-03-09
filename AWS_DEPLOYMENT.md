@@ -36,92 +36,43 @@
 
 ## Prerequisites
 
-- AWS CLI configured with appropriate credentials
-- Git repository URL
+- An AWS account with console access
 - YouTube cookies for authentication (see Cookie Configuration section)
 
+### Values Reference
+
+Keep these handy as you go through the console steps:
+
+| Value | What to use |
+|-------|-------------|
+| Region | `ap-south-1` (Mumbai) |
+| Bucket name | `video-downloader-<any-unique-number>` e.g. `video-downloader-1741500000` |
+| Key pair name | `video-downloader-key` |
+| IAM Role | Use your existing EC2 IAM role (see Step 1) |
+| GitHub repo | `https://github.com/nyxsky404/Video-Downloader.git` |
+
+> Note your **bucket name** and **EC2 public IP** after launch — you will need them for the terminal steps.
+
 ---
 
-## Deployment Script
+## Infrastructure Provisioning (AWS Console)
 
-### Environment Variables
+### S3 Bucket
 
-```bash
-export AWS_REGION="ap-south-1"
-export PROJECT_NAME="video-downloader"
-export S3_BUCKET="video-downloader-$(date +%s)"
-export KEY_NAME="video-downloader-key"
-export GITHUB_REPO="https://github.com/nyxsky404/Video-Downloader.git"  # Update this
-```
+**Console path:** `S3 → Create bucket`
 
----
+1. **Bucket name:** `video-downloader-<unique-number>` (must be globally unique, e.g. `video-downloader-1741500000`)
+2. **AWS Region:** `ap-south-1`
+3. **Block Public Access settings:** uncheck **"Block all public access"** → check the acknowledgement warning
+4. Leave all other settings as default → click **Create bucket**
 
-## Infrastructure Provisioning
+**Add public-read bucket policy:**
 
-### 1. IAM Resources
+1. Open the bucket → **Permissions tab**
+2. Scroll to **Bucket policy** → click **Edit**
+3. Paste the following (replace `YOUR-BUCKET-NAME`):
 
-**EC2 Instance Role:**
-```bash
-# Trust policy
-cat > /tmp/trust-policy.json <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Service": "ec2.amazonaws.com"},
-    "Action": "sts:AssumeRole"
-  }]
-}
-EOF
-
-# Create role
-aws iam create-role \
-  --role-name video-downloader-ec2-role \
-  --assume-role-policy-document file:///tmp/trust-policy.json
-
-# S3 access policy
-cat > /tmp/s3-access-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket"],
-    "Resource": ["arn:aws:s3:::${S3_BUCKET}","arn:aws:s3:::${S3_BUCKET}/*"]
-  }]
-}
-EOF
-
-aws iam put-role-policy \
-  --role-name video-downloader-ec2-role \
-  --policy-name S3AccessPolicy \
-  --policy-document file:///tmp/s3-access-policy.json
-
-# Instance profile
-aws iam create-instance-profile --instance-profile-name video-downloader-ec2-profile
-aws iam add-role-to-instance-profile \
-  --instance-profile-name video-downloader-ec2-profile \
-  --role-name video-downloader-ec2-role
-
-sleep 10  # IAM propagation
-```
-
-### 2. S3 Bucket
-
-```bash
-# Create bucket
-aws s3api create-bucket \
-  --bucket $S3_BUCKET \
-  --region $AWS_REGION \
-  --create-bucket-configuration LocationConstraint=$AWS_REGION
-
-# Public access configuration
-aws s3api put-public-access-block \
-  --bucket $S3_BUCKET \
-  --public-access-block-configuration \
-    BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false
-
-# Bucket policy (public read)
-cat > /tmp/bucket-policy.json <<EOF
+```json
 {
   "Version": "2012-10-17",
   "Statement": [{
@@ -129,88 +80,81 @@ cat > /tmp/bucket-policy.json <<EOF
     "Effect": "Allow",
     "Principal": "*",
     "Action": "s3:GetObject",
-    "Resource": "arn:aws:s3:::${S3_BUCKET}/*"
+    "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/*"
   }]
 }
-EOF
-
-aws s3api put-bucket-policy --bucket $S3_BUCKET --policy file:///tmp/bucket-policy.json
 ```
 
-### 3. EC2 Infrastructure
+4. Click **Save changes**
 
+### 3. EC2 Key Pair
+
+**Console path:** `EC2 → Network & Security → Key Pairs → Create key pair`
+
+1. **Name:** `video-downloader-key`
+2. **Key pair type:** RSA
+3. **Private key file format:** `.pem`
+4. Click **Create key pair** — the `.pem` file downloads automatically to your machine
+
+After downloading, set permissions in your terminal:
 ```bash
-# SSH keypair
-aws ec2 create-key-pair \
-  --key-name $KEY_NAME \
-  --query 'KeyMaterial' \
-  --output text \
-  --region $AWS_REGION > ${KEY_NAME}.pem
-chmod 400 ${KEY_NAME}.pem
-
-# Security Group
-SG_ID=$(aws ec2 create-security-group \
-  --group-name video-downloader-sg \
-  --description "Video Downloader API" \
-  --region $AWS_REGION \
-  --query 'GroupId' \
-  --output text)
-
-aws ec2 authorize-security-group-ingress \
-  --group-id $SG_ID \
-  --ip-permissions \
-    IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges='[{CidrIp=0.0.0.0/0}]' \
-    IpProtocol=tcp,FromPort=8000,ToPort=8000,IpRanges='[{CidrIp=0.0.0.0/0}]' \
-  --region $AWS_REGION
-
-# Get latest Amazon Linux 2023 AMI
-AMI_ID=$(aws ec2 describe-images \
-  --owners amazon \
-  --filters "Name=name,Values=al2023-ami-2023.*-x86_64" "Name=state,Values=available" \
-  --query "sort_by(Images, &CreationDate)[-1].ImageId" \
-  --output text \
-  --region $AWS_REGION)
-
-# Launch instance
-INSTANCE_ID=$(aws ec2 run-instances \
-  --image-id $AMI_ID \
-  --instance-type t3.micro \
-  --key-name $KEY_NAME \
-  --security-group-ids $SG_ID \
-  --iam-instance-profile Name=video-downloader-ec2-profile \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=video-downloader}]' \
-  --region $AWS_REGION \
-  --query 'Instances[0].InstanceId' \
-  --output text)
-
-# Wait for instance ready
-aws ec2 wait instance-running --instance-ids $INSTANCE_ID --region $AWS_REGION
-PUBLIC_IP=$(aws ec2 describe-instances \
-  --instance-ids $INSTANCE_ID \
-  --region $AWS_REGION \
-  --query 'Reservations[0].Instances[0].PublicIpAddress' \
-  --output text)
-
-# Configure metadata service for Docker IAM access
-sleep 120  # Boot time
-aws ec2 modify-instance-metadata-options \
-  --instance-id $INSTANCE_ID \
-  --http-tokens optional \
-  --http-put-response-hop-limit 2 \
-  --region $AWS_REGION
-
-echo "Instance ID: $INSTANCE_ID"
-echo "Public IP: $PUBLIC_IP"
+chmod 400 ~/Downloads/video-downloader-key.pem
 ```
 
 ---
 
-## Application Deployment
+### 4. Security Group
+
+**Console path:** `EC2 → Network & Security → Security Groups → Create security group`
+
+1. **Security group name:** `video-downloader-sg`
+2. **Description:** `Video Downloader API`
+3. **VPC:** leave as default VPC
+4. Under **Inbound rules**, click **Add rule** twice:
+
+| Type | Protocol | Port | Source |
+|------|----------|------|--------|
+| SSH | TCP | 22 | `0.0.0.0/0` |
+| Custom TCP | TCP | 8000 | `0.0.0.0/0` |
+
+5. Click **Create security group**
+
+---
+
+### 5. Launch EC2 Instance
+
+**Console path:** `EC2 → Instances → Launch instances`
+
+| Setting | Value |
+|---------|-------|
+| Name | `video-downloader` |
+| AMI | Amazon Linux 2023 AMI (64-bit x86) |
+| Instance type | `t3.micro` |
+| Key pair | `video-downloader-key` |
+| Security group | `video-downloader-sg` (select existing) |
+| Storage | 8 GiB gp3 |
+
+Click **Launch instance**.
+
+**Wait ~2 minutes** for the instance state to show "Running", then copy the **Public IPv4 address** from the instance details page.
+
+**Configure IMDS (required for Docker to access IAM credentials):**
+
+1. Select your instance → **Actions → Instance settings → Modify instance metadata options**
+2. Set **IMDSv2** to `Optional`
+3. Set **Metadata response hop limit** to `2`
+4. Click **Save**
+
+---
+
+## Application Deployment (Terminal Required)
+
+> Replace `<PUBLIC_IP>` with your EC2 instance's Public IPv4 address and `<BUCKET_NAME>` with your S3 bucket name throughout this section.
 
 ### Install Docker & Dependencies
 
 ```bash
-ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP <<'ENDSSH'
+ssh -i ~/Downloads/video-downloader-key.pem ec2-user@<PUBLIC_IP> <<'ENDSSH'
 sudo yum update -y && \
 sudo yum install -y docker git && \
 sudo systemctl enable --now docker && \
@@ -221,8 +165,8 @@ ENDSSH
 ### Build & Run Container
 
 ```bash
-ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP "
-git clone $GITHUB_REPO ~/video-downloader
+ssh -i ~/Downloads/video-downloader-key.pem ec2-user@<PUBLIC_IP> "
+git clone https://github.com/nyxsky404/Video-Downloader.git ~/video-downloader
 cd ~/video-downloader
 docker build -t video-downloader:latest .
 docker run -d \
@@ -230,8 +174,8 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -e USE_S3=true \
-  -e S3_BUCKET_NAME=$S3_BUCKET \
-  -e AWS_REGION=$AWS_REGION \
+  -e S3_BUCKET_NAME=<BUCKET_NAME> \
+  -e AWS_REGION=ap-south-1 \
   video-downloader:latest
 "
 ```
@@ -239,7 +183,7 @@ docker run -d \
 ### Verify Deployment
 
 ```bash
-curl http://$PUBLIC_IP:8000/health
+curl http://<PUBLIC_IP>:8000/health
 # Expected: {"status":"healthy","cookies":{"status":"missing",...}}
 ```
 
@@ -262,16 +206,19 @@ curl http://$PUBLIC_IP:8000/health
 | `YT_DLP_MAX_RETRIES` | No | `3` | yt-dlp retry attempts |
 | `YT_DLP_MAX_FILESIZE` | No | `500` | Max file size (MB) |
 
-### YouTube Cookies (Optional)
+### YouTube Cookies
 
 For YouTube downloads, configure cookies:
 
-```bash
-# Export cookies.txt from browser (use "Get cookies.txt LOCALLY" extension)
-scp -i ${KEY_NAME}.pem cookies.txt ec2-user@$PUBLIC_IP:~/video-downloader/
+1. Export `cookies.txt` from your browser using the **"Get cookies.txt LOCALLY"** Chrome/Firefox extension
+2. Upload the file and restart the container:
 
-# Restart with cookies mounted
-ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP "
+```bash
+# Upload cookies to EC2
+scp -i ~/Downloads/video-downloader-key.pem cookies.txt ec2-user@<PUBLIC_IP>:~/video-downloader/
+
+# Restart container with cookies mounted
+ssh -i ~/Downloads/video-downloader-key.pem ec2-user@<PUBLIC_IP> "
 docker stop video-downloader && docker rm video-downloader
 docker run -d \
   --name video-downloader \
@@ -279,14 +226,14 @@ docker run -d \
   --network host \
   -v ~/video-downloader/cookies.txt:/app/cookies.txt \
   -e USE_S3=true \
-  -e S3_BUCKET_NAME=$S3_BUCKET \
-  -e AWS_REGION=$AWS_REGION \
+  -e S3_BUCKET_NAME=<BUCKET_NAME> \
+  -e AWS_REGION=ap-south-1 \
   -e YT_DLP_COOKIES_FILE=/app/cookies.txt \
   video-downloader:latest
 "
 
 # Verify
-curl http://$PUBLIC_IP:8000/cookies/status
+curl http://<PUBLIC_IP>:8000/cookies/status
 ```
 
 ---
@@ -296,31 +243,31 @@ curl http://$PUBLIC_IP:8000/cookies/status
 ### Logging
 
 ```bash
-# View logs
-ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP "docker logs -f --tail 100 video-downloader"
+# View live logs
+ssh -i ~/Downloads/video-downloader-key.pem ec2-user@<PUBLIC_IP> "docker logs -f --tail 100 video-downloader"
 
-# Export logs
-ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP "docker logs video-downloader" > app.log
+# Export logs locally
+ssh -i ~/Downloads/video-downloader-key.pem ec2-user@<PUBLIC_IP> "docker logs video-downloader" > app.log
 ```
 
 ### Container Management
 
 ```bash
-# Restart
-ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP "docker restart video-downloader"
+# Restart container
+ssh -i ~/Downloads/video-downloader-key.pem ec2-user@<PUBLIC_IP> "docker restart video-downloader"
 
 # Update application
-ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP "
+ssh -i ~/Downloads/video-downloader-key.pem ec2-user@<PUBLIC_IP> "
 cd ~/video-downloader
 git pull
 docker build -t video-downloader:latest .
 docker stop video-downloader
 docker rm video-downloader
-# Re-run docker run command with same parameters
+# Re-run the docker run command from the Application Deployment section
 "
 
 # Health check
-curl http://$PUBLIC_IP:8000/health
+curl http://<PUBLIC_IP>:8000/health
 ```
 
 ### Monitoring
@@ -346,7 +293,7 @@ curl http://$PUBLIC_IP:8000/health
 
 **POST /download**
 ```bash
-curl -X POST http://$PUBLIC_IP:8000/download \
+curl -X POST http://<PUBLIC_IP>:8000/download \
   -H "Content-Type: application/json" \
   -d '{"url":"https://youtube.com/watch?v=xxx"}'
 ```
@@ -354,18 +301,18 @@ Response: `{"status":"success","data":{"filename":"...","download_url":"https://
 
 **GET /video/{filename}**
 ```bash
-curl http://$PUBLIC_IP:8000/video/video_xxx.mp4
+curl http://<PUBLIC_IP>:8000/video/video_xxx.mp4
 ```
 Response (S3): `{"url":"https://bucket.s3.region.amazonaws.com/videos/video_xxx.mp4"}`
 
 **GET /health**
 ```bash
-curl http://$PUBLIC_IP:8000/health
+curl http://<PUBLIC_IP>:8000/health
 ```
 
 **GET /cookies/status**
 ```bash
-curl http://$PUBLIC_IP:8000/cookies/status
+curl http://<PUBLIC_IP>:8000/cookies/status
 ```
 
 ### Flow Diagram
