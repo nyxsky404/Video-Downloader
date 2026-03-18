@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     LOCAL_DOWNLOAD_DIR: Path = Path("./downloads")
     
-    DOWNLOAD_TIMEOUT: int = 300
+    DOWNLOAD_TIMEOUT: int = 900
     YT_DLP_MAX_RETRIES: int = 3
     YT_DLP_MAX_FILESIZE: int = 500
     YT_DLP_COOKIES_FILE: Path = Path("")

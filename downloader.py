@@ -20,6 +20,50 @@ logger = logging.getLogger(__name__)
 
 class VideoDownloader:
     
+    def _find_downloaded_file(self, video_id: str, expected_filename: str) -> Path:
+        """Find the actual downloaded file, handling yt-dlp's format code suffixes."""
+        # First check for the expected merged file
+        if not expected_filename.endswith('.mp4'):
+            expected_filename = expected_filename.rsplit('.', 1)[0] + '.mp4'
+        expected_path = Path(expected_filename)
+        if expected_path.exists():
+            return expected_path
+        
+        # Check for incomplete downloads (.part files)
+        part_files = list(self.download_dir.glob(f'*{video_id}*.part'))
+        if part_files:
+            logger.warning(f"Incomplete download detected for video {video_id}: {[f.name for f in part_files]}")
+        
+        # Search for any file matching *{video_id}.* pattern
+        # Exclude .part files (incomplete downloads)
+        matching_files = list(self.download_dir.glob(f'*{video_id}.*'))
+        valid_files = [f for f in matching_files if f.suffix != '.part']
+        
+        # Separate merged files from format-coded files (e.g., .f251.webm)
+        merged_files = [f for f in valid_files if '.f' not in f.name]
+        format_coded_files = [f for f in valid_files if '.f' in f.name]
+        
+        if merged_files:
+            # Prefer merged files
+            for ext in ['.mp4', '.webm', '.mkv']:
+                for f in merged_files:
+                    if f.suffix == ext:
+                        return f
+            return merged_files[0]
+        
+        if format_coded_files:
+            # Format-coded files indicate merge didn't happen - log warning
+            logger.warning(f"Found unmerged format-coded files for video {video_id}. FFmpeg merge may have failed.")
+            # Prefer video+audio combined formats, then video-only, then audio-only
+            # Common video format codes are typically higher numbers
+            for ext in ['.mp4', '.webm', '.mkv']:
+                video_files = [f for f in format_coded_files if f.suffix == ext and not f.name.endswith(('.f251.webm', '.f250.webm', '.f249.webm'))]
+                if video_files:
+                    return video_files[0]
+            return format_coded_files[0]
+        
+        return None
+    
     def __init__(self):
         self.storage: StorageBackend = get_storage_backend()
         self.download_dir = self.storage.get_download_dir()
@@ -48,9 +92,10 @@ class VideoDownloader:
             
             ydl_opts = {
                 'format': (
+                    'best[ext=mp4][height<=2160]/'
+                    'bestvideo[ext=mp4][height<=2160]+bestaudio[ext=m4a]/'
                     'bestvideo[height<=2160]+bestaudio/'
                     'best[height<=2160]/'
-                    'bestvideo+bestaudio/'
                     'best'
                 ),
                 'outtmpl': str(output_path),
@@ -69,6 +114,10 @@ class VideoDownloader:
                 'max_filesize': settings.YT_DLP_MAX_FILESIZE * 1024 * 1024,
                 'logger': logger,
                 'js_runtimes': {'node': {}},
+                # Speed optimizations
+                'concurrent_fragment_downloads': 8,  # Parallel fragment downloads for DASH/HLS (increase for more speed)
+                'buffersize': 1024 * 16,  # Larger buffer for faster downloads
+                # Sleep intervals (keep to avoid rate-limiting)
                 'sleep_interval': 5,
                 'max_sleep_interval': 15,
                 'sleep_requests': 1,
@@ -92,12 +141,11 @@ class VideoDownloader:
                     
                     for entry in entries:
                         if entry:
-                            filename = ydl.prepare_filename(entry)
-                            if not filename.endswith('.mp4'):
-                                filename = filename.rsplit('.', 1)[0] + '.mp4'
+                            video_id = entry.get('id', '')
+                            expected_filename = ydl.prepare_filename(entry)
+                            filepath = self._find_downloaded_file(video_id, expected_filename)
                             
-                            filepath = Path(filename)
-                            if filepath.exists():
+                            if filepath and filepath.exists():
                                 file_url = self.storage.save_file(filepath, filepath.name)
                                 filenames.append(filepath.name)
                                 download_urls.append(file_url)
@@ -112,15 +160,12 @@ class VideoDownloader:
                         'download_urls': download_urls,
                     }
                 else:
-                    filename = ydl.prepare_filename(info)
-
-                    if not filename.endswith('.mp4'):
-                        filename = filename.rsplit('.', 1)[0] + '.mp4'
-                        
-                    filepath = Path(filename)
+                    video_id = info.get('id', '')
+                    expected_filename = ydl.prepare_filename(info)
+                    filepath = self._find_downloaded_file(video_id, expected_filename)
                     
-                    if not filepath.exists():
-                        raise FileNotFoundError(f"Downloaded file not found: {filepath}")
+                    if not filepath or not filepath.exists():
+                        raise FileNotFoundError(f"Downloaded file not found for video ID {video_id}")
                     
                     logger.info(f"Download successful: {filepath.name}")
                     
