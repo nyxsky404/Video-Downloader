@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from typing import Dict
 import yt_dlp
+import shutil
 
 from config import settings
 from cookies_checker import check_cookies
@@ -19,6 +20,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class VideoDownloader:
+    
+    def _cleanup_partial_downloads(self) -> None:
+        """Clean up partial downloads and fragment files to free disk space."""
+        try:
+            patterns = ['*.part', '*.part-*', '*.ytdl']
+            cleaned = 0
+            for pattern in patterns:
+                for f in self.download_dir.glob(pattern):
+                    try:
+                        f.unlink()
+                        cleaned += 1
+                        logger.debug(f"Cleaned up partial file: {f.name}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove {f.name}: {e}")
+            if cleaned > 0:
+                logger.info(f"Cleaned up {cleaned} partial/fragment files")
+        except Exception as e:
+            logger.warning(f"Cleanup failed: {e}")
     
     def _find_downloaded_file(self, video_id: str, expected_filename: str) -> Path:
         """Find the actual downloaded file, handling yt-dlp's format code suffixes."""
@@ -181,6 +200,8 @@ class VideoDownloader:
                     }
                 
         except Exception as e:
+            # Clean up partial downloads on failure to free disk space
+            self._cleanup_partial_downloads()
             if "DownloadError" in type(e).__name__:
                 logger.error(f"Download error: {str(e)}")
                 raise Exception(f"Failed to download video: {str(e)}")
